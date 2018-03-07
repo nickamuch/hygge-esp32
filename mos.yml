@@ -1,0 +1,33 @@
+author: mongoose-os
+description: A demo Mongoose OS firmware for C/C++
+version: 1.0
+
+libs_version: ${mos.version}
+modules_version: ${mos.version}
+mongoose_os_version: ${mos.version}
+
+tags:
+  - c
+
+sources:
+  - src
+
+filesystem:
+  - fs
+
+config_schema:
+  - ["aws.thing_name", "esp32_0829E0"]
+  - ["mqtt.enable", true]
+  - ["mqtt.server", "a1njuelyuhno3x.iot.us-west-2.amazonaws.com:8883"]
+  - ["mqtt.ssl_cert", "aws-iot-97e9f4103a.crt.pem"]
+  - ["mqtt.ssl_key", "aws-iot-97e9f4103a.key.pem"]
+  - ["mqtt.ssl_ca_cert", "ca.pem"]
+  #- ["wifi.sta.pass", "ff1c14c9ff8e1ca2c7208e342c"]
+  #- ["wifi.sta.enable", true]
+  #- ["wifi.sta.ssid", "myqwest3540"]
+
+libs:
+  - origin: https://github.com/mongoose-os-libs/demo-bundle
+
+# Used by the mos tool to catch mos binaries incompatible with this file format
+manifest_version: 2017-05-18
