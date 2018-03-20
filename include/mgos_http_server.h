@@ -8,7 +8,9 @@
 
 #include <stdbool.h>
 
-#include "mongoose/mongoose.h"
+#include "mgos_config.h"
+#include "mgos_init.h"
+#include "common/cs_dbg.h"
 
 #if defined(__cplusplus)
 extern "C" {  // Make sure we have C-declarations in C++ programs

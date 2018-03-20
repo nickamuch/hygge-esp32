@@ -5,19 +5,18 @@
 
 #include "mgos_http_server.h"
 
+#if defined(MGOS_HAVE_ATCA)
+#include "mgos_atca.h"
+#endif
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "common/cs_dbg.h"
 #include "common/cs_file.h"
 #include "common/json_utils.h"
 #include "common/str_util.h"
-
-#if defined(MGOS_HAVE_ATCA)
-#include "mgos_atca.h"
-#endif
 #include "mgos_config_util.h"
 #include "mgos_debug.h"
 #include "mgos_debug_hal.h"
@@ -30,6 +29,7 @@
 #include "mgos_utils.h"
 
 #define MGOS_F_RELOAD_CONFIG MG_F_USER_5
+#define BODY_LEN 200
 
 #if MG_ENABLE_FILESYSTEM
 static struct mg_serve_http_opts s_http_server_opts;
@@ -175,6 +175,10 @@ static void on_net_ready(int ev, void *evd, void *arg) {
 }
 #endif /* MGOS_ENABLE_TUNNEL */
 
+static void reboot_cb(void *arg) {
+  mgos_system_restart();
+}
+
 static void mgos_http_ev(struct mg_connection *c, int ev, void *p,
                          void *user_data) {
   switch (ev) {
@@ -189,11 +193,84 @@ static void mgos_http_ev(struct mg_connection *c, int ev, void *p,
 #if MG_ENABLE_FILESYSTEM
       if (s_http_server_opts.document_root != NULL) {
         struct http_message *hm = (struct http_message *) p;
-        LOG(LL_INFO, ("%p %.*s %.*s", c, (int) hm->method.len, hm->method.p,
-                      (int) hm->uri.len, hm->uri.p));
 
-        mg_serve_http(c, p, s_http_server_opts);
-        (void) hm;
+        LOG(LL_INFO, ("meth: %.*s", hm->method.len, hm->method.p));
+        LOG(LL_INFO, ("uri: %.*s", hm->uri.len, hm->uri.p));
+
+        // Handle POST to /configure_ap.html
+        if (mg_vcmp(&(hm->method), "POST") == 0 &&
+            mg_vcmp(&(hm->uri), "/configure_ap.html") == 0) {
+          LOG(LL_DEBUG, ("responding to POST request"));
+          LOG(LL_DEBUG, ("Body: %.*s", hm->body.len, hm->body.p));
+
+          char *buf = calloc(1, BODY_LEN);
+          char *name = calloc(1, BODY_LEN);
+          char *pass = calloc(1, BODY_LEN);
+          char input_valid = 1;
+          if (hm->body.len < BODY_LEN) {
+            memcpy(buf, hm->body.p, hm->body.len);
+          } else {
+            input_valid = 0;
+          }
+
+          // Extract access point name from body
+          char *start_ptr = buf + strlen("ap_name=");
+          char *end_ptr = strstr(buf, "&ap_pass=");
+          int length = end_ptr - start_ptr;
+
+          if (length < BODY_LEN && input_valid) {
+            memcpy(name, start_ptr, length);
+            //TODO need to handle escaped characters
+          } else {
+            input_valid = 0;
+          }
+
+          // Extract access point name from body
+          start_ptr = end_ptr + strlen("&ap_name=");
+          end_ptr = buf + strlen(buf);
+          length = end_ptr - start_ptr;
+          if (length < BODY_LEN && input_valid) {
+            memcpy(pass, start_ptr, length);
+            //TODO need to handle escaped characters
+          } else {
+            input_valid = 0;
+          }
+
+          LOG(LL_DEBUG, ("body len: %d, strlen %d", hm->body.len, strlen(buf)));
+          LOG(LL_DEBUG, ("input_valid: %d, extracted: %s-- %s--",
+                         input_valid, name, pass));
+
+           if (input_valid) {
+             // Save WiFi parameters in persistent storage and restart the device
+             // to use these parameters.
+             LOG(LL_INFO, ("Configuring WiFi"));
+             mgos_sys_config_set_wifi_sta_pass(pass);
+             mgos_sys_config_set_wifi_sta_ssid(name);
+             mgos_sys_config_set_wifi_sta_enable(true);
+             char *err = NULL;
+             save_cfg(&mgos_sys_config, &err);
+             printf("Saving configuration: %s\n", err ? err : "no error");
+             free(err);
+
+             // Allow server time to serve web page before reboot
+             mgos_set_timer(3000, 0, reboot_cb, NULL);
+             LOG(LL_INFO, ("Rebooting"));
+           } else{
+             LOG(LL_ERROR, ("Invalid access point info. Not configuring."));
+           }
+
+          free(buf);
+          free(name);
+          free(pass);
+          mg_serve_http(c, p, s_http_server_opts);
+        }
+
+        // Serve GET requests. Invalid paths will get a 404 response
+        else if(mg_vcmp(&(hm->method), "GET") == 0) {
+          LOG(LL_INFO, ("serving GET request"));
+          mg_serve_http(c, p, s_http_server_opts);
+          (void) hm;
+        }
       } else
 #endif
       {
