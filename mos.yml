@@ -22,6 +22,10 @@ config_schema:
   - ["mqtt.ssl_cert", "aws-iot-97e9f4103a.crt.pem"]
   - ["mqtt.ssl_key", "aws-iot-97e9f4103a.key.pem"]
   - ["mqtt.ssl_ca_cert", "ca.pem"]
+  - ["wifi.ap.hostname", "hygge"]
+  #   see deps/wifi/mos.yml for more info on configuration parameters to set
+  #   static IP, default gateway, etc.
+
   #- ["wifi.sta.pass", "ff1c14c9ff8e1ca2c7208e342c"]
   #- ["wifi.sta.enable", true]
   #- ["wifi.sta.ssid", "myqwest3540"]

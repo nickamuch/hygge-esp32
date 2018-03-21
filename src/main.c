@@ -66,8 +66,21 @@ static void send_battery_status(void * arg) {
  * Status Handler
  */
 static void send_ac_mains_status(void * arg) {
-  // TODO: implement
-  LOG(LL_INFO, ("Unimplemented: send_ac_mains_status"));
+  static uint msg_id = 0; // Resets to 0 after every device reset.
+
+  // Print json to message buffer
+  char* message = str_buf2;
+  memset(message, 0, STR_BUF2_LEN);
+  struct json_out out = JSON_OUT_BUF(message, STR_BUF2_LEN);
+  json_printf(&out, "{version: %u, id: %u, ac_mains_on: %B}",
+              MESSAGING_VERSION, msg_id, true); // TODO: use real status value
+
+  // Send message
+  bool sent = mgos_mqtt_pub(AC_MAINS_STATUS_PATH, message, strlen(message),
+                            1, false);
+  msg_id++;
+  LOG(LL_INFO, ("sending ac_mains status. sent: %d, message: %s", sent,
+                message));
 }
 
 /**
@@ -83,16 +96,19 @@ static void send_power_output_status(void * arg) {
  */
 static void send_device_info(void * arg) {
   static uint msg_id = 0; // Resets to 0 after every device reset.
-  char* topic = str_buf;
+  char topic[] = DEVICE_INFO_STATUS_PATH;
+
+  // Print json to message buffer
   char* message = str_buf2;
   memset(message, 0, STR_BUF2_LEN);
   struct json_out out = JSON_OUT_BUF(message, STR_BUF2_LEN);
-  snprintf(topic, STR_BUF_LEN, DEVICE_INFO_STATUS_PATH);
   json_printf(&out, "{version: %u, id: %u, firmware: %u}",
               MESSAGING_VERSION, msg_id, FIRMWARE_VERSION);
-  msg_id++;
+
+  // Send message
   bool sent = mgos_mqtt_pub(DEVICE_INFO_STATUS_PATH, message, strlen(message),
                             1, false);
+  msg_id++;
   LOG(LL_INFO, ("sending device_info status. sent: %d, message: %s", sent,
                 message));
 }
@@ -105,7 +121,7 @@ static void handle_outlet_switch_states_cmd(
     const char *msg, int msg_len, void *ud){
   LOG(LL_INFO, ("outlet_switch_states message: %.*s", msg_len, msg));
   uint req_id;
-  char version, ac1, ac2, ac3, ac4;
+  bool version, ac1, ac2, ac3, ac4;
   json_scanf(
       msg, msg_len,
       "{version: %u, id: %u, ac1: %B, ac2: %B, ac3: %B, ac4: %B}",
@@ -177,7 +193,7 @@ static void handle_status_interval_cmd(
 static void handle_charge_cmd(
     struct mg_connection *nc, const char *topic, int topic_len, const char *msg,
     int msg_len, void *ud){
-  char charge;
+  bool charge;
   char version;
   uint req_id;
   LOG(LL_INFO, ("charge_cmd message: %.*s", msg_len, msg));
@@ -193,7 +209,7 @@ static void handle_charge_cmd(
 static void handle_discharge_cmd(
     struct mg_connection *nc, const char *topic, int topic_len, const char *msg,
     int msg_len, void *ud){
-  char discharge;
+  bool discharge;
   char version;
   uint req_id;
   LOG(LL_INFO, ("discharge_cmd message: %.*s", msg_len, msg));
@@ -231,7 +247,7 @@ static void handle_send_status_cmd(
   LOG(LL_INFO, ("send status cmd message: %.*s", msg_len, msg));
 
   json_scanf(msg, msg_len,
-             "{version: %u, id: %u, status_type: %B}",
+             "{version: %u, id: %u, status_type: %u}",
              &version, &req_id, &status_type);
   switch(status_type) {
     case battery:
@@ -261,7 +277,8 @@ static void handle_send_status_cmd(
 void add_mqtt_channel_handler(char* path, sub_handler_t handler) {
   memset(str_buf, 0, STR_BUF_LEN);
   strcpy(str_buf, DEVICE_ID);
-  strcpy(str_buf, path);
+  strcpy(str_buf + strlen(str_buf), path);
+  LOG(LL_INFO, ("subscribing to channel: %s", str_buf));
   mgos_mqtt_sub(str_buf, handler, NULL);
 }
 
